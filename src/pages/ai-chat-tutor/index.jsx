@@ -25,7 +25,7 @@ const AIChatTutor = () => {
     en: {
       title: "AI Tutor",
       placeholder: "Ask me anything...",
-      welcomeMessage: "Hello! I\'m your AI tutor. I\'m here to help you learn and understand any topic. Feel free to ask me questions about your studies!",
+      welcomeMessage: "Hello! I\'m your AI tutor. I\'m here to help you learn and understand any topic. Feel free to ask me questions about your studies! \n\n Note: This is just a sample and not the full working model, some features may not function yet as we/'re still building it.",
       typingIndicator: "AI is typing...",
     },
     hi: {
