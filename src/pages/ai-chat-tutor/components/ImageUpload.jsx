@@ -1,12 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { createWorker } from 'tesseract.js';
 import Icon from '../../../components/AppIcon';
 import Image from '../../../components/AppImage';
 
-const ImageUpload = ({ isOpen, onClose, onImageUpload, currentLanguage }) => {
+const ImageUpload = ({ isOpen, onClose, onTextExtracted, currentLanguage }) => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [extractedText, setExtractedText] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [step, setStep] = useState('upload'); // 'upload', 'processing', 'confirm'
+  const [stream, setStream] = useState(null);
+  const videoRef = useRef(null);
+  const [step, setStep] = useState('upload');
+  const [error, setError] = useState(null);
+  const fileInputRef = useRef(null);
 
   const labels = {
     en: {
@@ -16,88 +21,129 @@ const ImageUpload = ({ isOpen, onClose, onImageUpload, currentLanguage }) => {
       gallery: "Gallery",
       processing: "Processing image...",
       extractedText: "Extracted text:",
-      confirm: "Send to AI",
+      confirm: "Insert Text",
       cancel: "Cancel",
       retake: "Retake",
+      noText: "No text detected",
+      error: "Processing failed",
+      cameraError: "Camera access denied",
+      fileError: "Invalid image file"
     },
-    hi: {
-      title: "छवि अपलोड करें",
-      subtitle: "फोटो लें या गैलरी से चुनें",
-      camera: "कैमरा",
-      gallery: "गैलरी",
-      processing: "छवि प्रसंस्करण...",
-      extractedText: "निकाला गया पाठ:",
-      confirm: "AI को भेजें",
-      cancel: "रद्द करें",
-      retake: "फिर से लें",
-    },
-    bn: {
-      title: "ছবি আপলোড করুন",
-      subtitle: "ছবি তুলুন বা গ্যালারি থেকে নির্বাচন করুন",
-      camera: "ক্যামেরা",
-      gallery: "গ্যালারি",
-      processing: "ছবি প্রক্রিয়াকরণ...",
-      extractedText: "নিষ্কাশিত পাঠ:",
-      confirm: "AI-তে পাঠান",
-      cancel: "বাতিল",
-      retake: "আবার নিন",
-    },
-    te: {
-      title: "చిత్రాన్ని అప్‌లోడ్ చేయండి",
-      subtitle: "ఫోటో తీయండి లేదా గ్యాలరీ నుండి ఎంచుకోండి",
-      camera: "కెమెరా",
-      gallery: "గ్యాలరీ",
-      processing: "చిత్రం ప్రాసెసింగ్...",
-      extractedText: "వెలికితీసిన వచనం:",
-      confirm: "AI కి పంపండి",
-      cancel: "రద్దు చేయండి",
-      retake: "మళ్లీ తీయండి",
-    },
-    ta: {
-      title: "படத்தை பதிவேற்றவும்",
-      subtitle: "புகைப்படம் எடுக்கவும் அல்லது கேலரியில் இருந்து தேர்ந்தெடுக்கவும்",
-      camera: "கேமரா",
-      gallery: "கேலரி",
-      processing: "படம் செயலாக்கம்...",
-      extractedText: "பிரித்தெடுக்கப்பட்ட உரை:",
-      confirm: "AI க்கு அனுப்பவும்",
-      cancel: "ரத்து செய்",
-      retake: "மீண்டும் எடுக்கவும்",
-    },
+    // ... other language translations
   };
 
   const currentLabels = labels[currentLanguage] || labels.en;
 
-  const handleImageSelect = (source) => {
+  const processImage = async (imageUrl) => {
     setIsProcessing(true);
+    setError(null);
     setStep('processing');
 
-    // Simulate image capture/selection and OCR processing
-    setTimeout(() => {
-      const mockImage = source === 'camera' 
-        ? "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=400&h=300&fit=crop"
-        : "https://images.unsplash.com/photo-1596495578065-6e0763fa1178?w=400&h=300&fit=crop";
-      
-      const mockExtractedText = {
-        en: "Solve for x: 2x² + 5x - 3 = 0\nFind the roots of the quadratic equation.",
-        hi: "x के लिए हल करें: 2x² + 5x - 3 = 0\nद्विघात समीकरण के मूल ज्ञात करें।",
-        bn: "x এর জন্য সমাধান করুন: 2x² + 5x - 3 = 0\nদ্বিঘাত সমীকরণের মূল খুঁজুন।",
-        te: "x కోసం పరిష్కరించండి: 2x² + 5x - 3 = 0\nవర్గ సమీకరణం యొక్క మూలాలను కనుగొనండి।",
-        ta: "x க்கு தீர்க்கவும்: 2x² + 5x - 3 = 0\nஇருபடி சமன்பாட்டின் வேர்களைக் கண்டறியவும்।",
-      };
+    try {
+      if (!imageUrl.startsWith('data:image/')) {
+        throw new Error(currentLabels.fileError);
+      }
 
-      setSelectedImage(mockImage);
-      setExtractedText(mockExtractedText[currentLanguage] || mockExtractedText.en);
-      setIsProcessing(false);
+      const worker = await createWorker();
+      await worker.loadLanguage('eng');
+      await worker.initialize('eng');
+      
+      const { data: { text } } = await worker.recognize(imageUrl);
+      
+      setSelectedImage(imageUrl);
+      setExtractedText(text || currentLabels.noText);
       setStep('confirm');
-    }, 2000);
+
+      await worker.terminate();
+    } catch (err) {
+      console.error('OCR Error:', err);
+      setError(`${currentLabels.error}: ${err.message}`);
+      setStep('upload');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [stream]);
+
+  const handleCameraClick = async () => {
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'environment' } 
+      });
+      setStream(mediaStream);
+      setStep('camera');
+      
+      // Wait for video element to be available
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = mediaStream;
+          videoRef.current.play();
+        }
+      }, 0);
+    } catch (err) {
+      console.error('Camera Error:', err);
+      setError(currentLabels.cameraError);
+    }
+  };
+
+  const capturePhoto = async () => {
+    if (!videoRef.current) return;
+    
+    const video = videoRef.current;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    
+    // Stop the stream
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      setStream(null);
+    }
+    
+    await processImage(canvas.toDataURL('image/jpeg'));
+  };
+
+  const cancelCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      setStream(null);
+    }
+    setStep('upload');
+  };
+
+
+  const handleGalleryClick = () => fileInputRef.current?.click();
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setError(currentLabels.fileError);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => processImage(event.target.result);
+    reader.onerror = () => setError(currentLabels.fileError);
+    reader.readAsDataURL(file);
   };
 
   const handleConfirm = () => {
-    onImageUpload({
-      image: selectedImage,
-      extractedText: extractedText,
-    });
+    if (!extractedText) {
+      setError(currentLabels.noText);
+      return;
+    }
+
+    onTextExtracted(extractedText);
     handleClose();
   };
 
@@ -105,6 +151,7 @@ const ImageUpload = ({ isOpen, onClose, onImageUpload, currentLanguage }) => {
     setSelectedImage(null);
     setExtractedText('');
     setIsProcessing(false);
+    setError(null);
     setStep('upload');
     onClose();
   };
@@ -114,7 +161,6 @@ const ImageUpload = ({ isOpen, onClose, onImageUpload, currentLanguage }) => {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-200 p-4">
       <div className="bg-card rounded-2xl w-full max-w-md mx-auto overflow-hidden">
-        {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
           <div>
             <h3 className="text-lg font-semibold text-card-foreground">
@@ -132,13 +178,27 @@ const ImageUpload = ({ isOpen, onClose, onImageUpload, currentLanguage }) => {
           </button>
         </div>
 
-        {/* Content */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileChange}
+          accept="image/*"
+          className="hidden"
+        />
+
         <div className="p-4">
+          {error && (
+            <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-sm">
+              {error}
+            </div>
+          )}
+
           {step === 'upload' && (
             <div className="space-y-4">
               <button
-                onClick={() => handleImageSelect('camera')}
-                className="w-full flex items-center space-x-3 p-4 bg-muted hover:bg-muted/80 rounded-lg transition-colors duration-150"
+                onClick={handleCameraClick}
+                disabled={isProcessing}
+                className="w-full flex items-center space-x-3 p-4 bg-muted hover:bg-muted/80 rounded-lg transition-colors duration-150 disabled:opacity-50"
               >
                 <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
                   <Icon name="Camera" size={20} className="text-primary-foreground" />
@@ -150,8 +210,9 @@ const ImageUpload = ({ isOpen, onClose, onImageUpload, currentLanguage }) => {
               </button>
 
               <button
-                onClick={() => handleImageSelect('gallery')}
-                className="w-full flex items-center space-x-3 p-4 bg-muted hover:bg-muted/80 rounded-lg transition-colors duration-150"
+                onClick={handleGalleryClick}
+                disabled={isProcessing}
+                className="w-full flex items-center space-x-3 p-4 bg-muted hover:bg-muted/80 rounded-lg transition-colors duration-150 disabled:opacity-50"
               >
                 <div className="w-10 h-10 bg-secondary rounded-lg flex items-center justify-center">
                   <Icon name="Image" size={20} className="text-secondary-foreground" />
@@ -161,6 +222,36 @@ const ImageUpload = ({ isOpen, onClose, onImageUpload, currentLanguage }) => {
                   <p className="text-sm text-muted-foreground">Choose from gallery</p>
                 </div>
               </button>
+            </div>
+          )}
+
+
+          {step === 'camera' && (
+            <div className="space-y-4">
+              <div className="relative bg-black rounded-lg overflow-hidden">
+                <video
+                  ref={videoRef}
+                  className="w-full h-64 object-cover"
+                  autoPlay
+                  playsInline
+                  muted
+                />
+               
+              </div>
+              <div className="flex space-x-3">
+                <button
+                  onClick={cancelCamera}
+                  className="flex-1 px-4 py-2 bg-muted hover:bg-muted/80 text-foreground rounded-lg"
+                >
+                  {currentLabels.cancel}
+                </button>
+                <button
+                  onClick={capturePhoto}
+                  className="flex-1 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg"
+                >
+                  Take Photo
+                </button>
+              </div>
             </div>
           )}
 
@@ -180,16 +271,14 @@ const ImageUpload = ({ isOpen, onClose, onImageUpload, currentLanguage }) => {
 
           {step === 'confirm' && (
             <div className="space-y-4">
-              {/* Image Preview */}
               <div className="rounded-lg overflow-hidden">
                 <Image 
                   src={selectedImage} 
-                  alt="Selected image" 
+                  alt="Selected" 
                   className="w-full h-48 object-cover"
                 />
               </div>
 
-              {/* Extracted Text */}
               <div className="bg-muted rounded-lg p-3">
                 <p className="text-sm font-medium text-card-foreground mb-2">
                   {currentLabels.extractedText}
@@ -199,17 +288,17 @@ const ImageUpload = ({ isOpen, onClose, onImageUpload, currentLanguage }) => {
                 </p>
               </div>
 
-              {/* Actions */}
               <div className="flex space-x-3">
                 <button
                   onClick={() => setStep('upload')}
-                  className="flex-1 px-4 py-2 bg-muted hover:bg-muted/80 text-foreground rounded-lg transition-colors duration-150"
+                  className="flex-1 px-4 py-2 bg-muted hover:bg-muted/80 text-foreground rounded-lg"
                 >
                   {currentLabels.retake}
                 </button>
                 <button
                   onClick={handleConfirm}
-                  className="flex-1 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors duration-150"
+                  className="flex-1 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg"
+                  disabled={!extractedText}
                 >
                   {currentLabels.confirm}
                 </button>
