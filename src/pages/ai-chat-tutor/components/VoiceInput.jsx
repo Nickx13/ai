@@ -12,18 +12,39 @@ export default function VoiceInput({ isActive, onTranscript, onClose }) {
   } = useSpeechRecognition();
 
   const [isProcessing, setIsProcessing] = useState(false);
+  const [permissionError, setPermissionError] = useState(null);
+  const [isRequestingPermission, setIsRequestingPermission] = useState(false);
 
   // Handle speech recognition
   useEffect(() => {
-    if (isActive && browserSupportsSpeechRecognition) {
-      resetTranscript();
-      SpeechRecognition.startListening({ 
-        continuous: true,
-        language: "en-IN"
-      });
-    } else {
-      SpeechRecognition.stopListening();
-    }
+    const startRecognition = async () => {
+      if (isActive && browserSupportsSpeechRecognition) {
+        try {
+          setIsRequestingPermission(true);
+          // First request microphone permission
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          stream.getTracks().forEach(track => track.stop()); // Clean up immediately
+          
+          resetTranscript();
+          await SpeechRecognition.startListening({ 
+            continuous: true,
+            language: "en-IN"
+          });
+          setPermissionError(null);
+        } catch (error) {
+          console.error("Permission denied:", error);
+          setPermissionError(
+            error.name === 'NotAllowedError' 
+              ? "Please allow microphone permissions in your browser settings"
+              : "Microphone access failed"
+          );
+        } finally {
+          setIsRequestingPermission(false);
+        }
+      }
+    };
+
+    startRecognition();
 
     return () => {
       SpeechRecognition.stopListening();
@@ -45,19 +66,35 @@ export default function VoiceInput({ isActive, onTranscript, onClose }) {
         resetTranscript();
         onClose();
         setIsProcessing(false);
-      }, 500); // Small delay for better UX
+      }, 500);
     }
   };
 
-  const toggleListening = () => {
-    if (listening) {
-      SpeechRecognition.stopListening();
-    } else {
-      resetTranscript();
-      SpeechRecognition.startListening({ 
-        continuous: true,
-        language: "en-IN"
-      });
+  const toggleListening = async () => {
+    try {
+      setIsRequestingPermission(true);
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(track => track.stop());
+      setPermissionError(null);
+
+      if (listening) {
+        await SpeechRecognition.stopListening();
+      } else {
+        resetTranscript();
+        await SpeechRecognition.startListening({ 
+          continuous: true,
+          language: "en-IN"
+        });
+      }
+    } catch (error) {
+      console.error("Microphone access error:", error);
+      setPermissionError(
+        error.name === 'NotAllowedError' 
+          ? "Please allow microphone permissions in your browser settings"
+          : "Microphone access failed"
+      );
+    } finally {
+      setIsRequestingPermission(false);
     }
   };
 
@@ -84,16 +121,23 @@ export default function VoiceInput({ isActive, onTranscript, onClose }) {
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-80 max-w-[90vw]">
+        {/* Error Message */}
+        {permissionError && (
+          <div className="mb-4 p-2 bg-red-100 text-red-600 rounded text-sm">
+            {permissionError}
+          </div>
+        )}
+
         {/* Microphone Button */}
         <div className="flex justify-center mb-4">
           <button 
             onClick={toggleListening}
-            disabled={isProcessing}
+            disabled={isProcessing || isRequestingPermission}
             className={`w-16 h-16 rounded-full flex items-center justify-center
               ${listening ? "bg-red-100 animate-pulse" : "bg-gray-100"}
-              ${isProcessing ? "opacity-50" : ""}`}
+              ${isProcessing || isRequestingPermission ? "opacity-50" : ""}`}
           >
-            {isProcessing ? (
+            {isProcessing || isRequestingPermission ? (
               <div className="animate-spin">
                 <Icon name="Loader2" size={24} className="text-gray-600" />
               </div>
@@ -110,11 +154,13 @@ export default function VoiceInput({ isActive, onTranscript, onClose }) {
         {/* Status Messages */}
         <div className="mb-4 text-center">
           <p className="font-medium">
-            {isProcessing ? "Processing..." : 
+            {isRequestingPermission ? "Requesting access..." :
+             isProcessing ? "Processing..." : 
              listening ? "Listening..." : "Ready to listen"}
           </p>
           <p className="text-sm text-gray-500">
-            {isProcessing ? "Sending your message..." :
+            {isRequestingPermission ? "Checking microphone permissions..." :
+             isProcessing ? "Sending your message..." :
              listening ? "Speak now - click mic when done" : 
              "Press the mic button to begin"}
           </p>
@@ -139,15 +185,15 @@ export default function VoiceInput({ isActive, onTranscript, onClose }) {
               onClose();
             }}
             className="flex-1 py-2 bg-gray-200 rounded-lg"
-            disabled={isProcessing}
+            disabled={isProcessing || isRequestingPermission}
           >
             Cancel
           </button>
           <button
             onClick={handleSend}
-            disabled={!transcript.trim() || isProcessing}
+            disabled={!transcript.trim() || isProcessing || isRequestingPermission}
             className={`flex-1 py-2 rounded-lg ${
-              (!transcript.trim() || isProcessing) 
+              (!transcript.trim() || isProcessing || isRequestingPermission) 
                 ? "bg-gray-300 text-gray-500" 
                 : "bg-primary text-white"
             }`}
