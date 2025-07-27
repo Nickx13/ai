@@ -5,7 +5,7 @@ export async function sendMessage(userMessage) {
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer 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`,
+        "Authorization": `Bearer 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`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
