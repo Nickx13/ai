@@ -278,8 +278,9 @@ const ImageUpload = ({ isOpen, onClose, onTextExtracted, currentLanguage }) => {
                   className="w-full h-48 object-cover"
                 />
               </div>
-
-              <div className="bg-muted rounded-lg p-3">
+          
+              {/* Updated text container with scroll */}
+              <div className="bg-muted rounded-lg p-3 max-h-[200px] overflow-y-auto">
                 <p className="text-sm font-medium text-card-foreground mb-2">
                   {currentLabels.extractedText}
                 </p>
@@ -287,8 +288,9 @@ const ImageUpload = ({ isOpen, onClose, onTextExtracted, currentLanguage }) => {
                   {extractedText}
                 </p>
               </div>
-
-              <div className="flex space-x-3">
+          
+              {/* Fixed buttons container */}
+              <div className="flex space-x-3 pt-2">
                 <button
                   onClick={() => setStep('upload')}
                   className="flex-1 px-4 py-2 bg-muted hover:bg-muted/80 text-foreground rounded-lg"
