@@ -5,7 +5,7 @@ export async function sendMessage(userMessage) {
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer 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`,
+        "Authorization": `Bearer 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`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
@@ -46,3 +46,4 @@ export async function sendMessage(userMessage) {
     return "Buddy is taking a break! Try again in a minute 😊";
   }
 }
+
